@@ -19,10 +19,21 @@ Diff Checker is a Go-based CLI tool that helps ensure code changes comply with s
 ## Installation
 
 ```bash
+# Clone the repository
 git clone <repository-url>
 cd diff-checker
+
+# Download dependencies
 go mod download
+
+# Build the project
+go build -o diff-checker ./cmd/diff-checker
+
+# (Optional) Install globally
+sudo mv diff-checker /usr/local/bin/
 ```
+
+Note: If you don't want to install globally, you can run the binary directly from the project directory using `./diff-checker`.
 
 ## Configuration
 
