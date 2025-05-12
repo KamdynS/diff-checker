@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/KamdynS/diff-checker/internal/gitutils"
 	"github.com/KamdynS/diff-checker/internal/llm"
@@ -19,30 +20,44 @@ func main() {
 	repoPath := flag.String("repo-path", ".", "Path to the git repository.")
 	rulesDir := flag.String("rules-dir", "", "Path to the directory containing markdown rule files.")
 	diffTarget := flag.String("diff-target", "HEAD~1..HEAD", "Git diff target for comparison (e.g., HEAD~1..HEAD, main..branch).")
+	logFile := flag.String("log-file", "diff-checker.log", "Path to log file (default diff-checker.log in current directory).")
 
 	flag.Parse()
 
 	if *rulesDir == "" {
-		log.Fatal("Error: --rules-dir flag is required.")
+		fmt.Fprintln(os.Stderr, "Error: --rules-dir flag is required.")
+		os.Exit(1)
 	}
 
-	// Load .env file. Program will still run if it doesn't exist,
-	// but GEMINI_API_KEY might not be set.
-	err := godotenv.Load()
+	// Set up logging to file _before_ any log.Printf calls
+	logPath := *logFile
+	if !filepath.IsAbs(logPath) {
+		cwd, _ := os.Getwd()
+		logPath = filepath.Join(cwd, logPath)
+	}
+
+	lf, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "Could not open log file %s, falling back to stderr: %v\n", logPath, err)
+	} else {
+		log.SetOutput(lf)
+	}
+
+	// Load environment variables
+	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, relying on environment variables for GEMINI_API_KEY")
 	}
 
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		log.Fatal("Error: GEMINI_API_KEY environment variable not set. Please create a .env file or set it in your environment.")
+		fmt.Fprintln(os.Stderr, "Error: GEMINI_API_KEY environment variable not set.")
+		os.Exit(1)
 	}
 
-	log.Printf("Configuration:\n")
-	log.Printf("  Repository Path: %s\n", *repoPath)
-	log.Printf("  Rules Directory: %s\n", *rulesDir)
-	log.Printf("  Diff Target: %s\n", *diffTarget)
-	log.Printf("  Gemini API Key Loaded: %t\n", apiKey != "")
+	log.Printf("Repository Path: %s", *repoPath)
+	log.Printf("Rules Directory: %s", *rulesDir)
+	log.Printf("Diff Target: %s", *diffTarget)
+	log.Printf("Gemini API Key Loaded: %t", apiKey != "")
 
 	// Get git diff
 	log.Println("Fetching git diff...")
@@ -79,6 +94,7 @@ func main() {
 	// Uncomment the line below for verbose prompt debugging.
 	// log.Printf("Full prompt to LLM:\n%s\n", prompt)
 
+	fmt.Println("Analyzing diff...")
 	// Get assessment from LLM
 	log.Println("Sending request to LLM for assessment...")
 	assessment, err := llmClient.AssessDiff(prompt)
